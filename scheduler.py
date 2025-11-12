@@ -38,6 +38,8 @@ from math import ceil, floor
 
 
 CHUNK_SIZE = 15
+CHUNKS_PER_DAY = 24 * 60 // CHUNK_SIZE  
+
 
 class Task():
     def __init__(self, name, due, work_minutes, priority=1, desc="", min_chunk_minutes=None):
@@ -66,12 +68,30 @@ class Task():
         )
 
 
-def generateSchedule(tasks, start, availableMinutes, lastDay=None):\
+def timeToChunk(time):
+    h, m = map(int, time.split(":"))
+    return (h * 60 + m) // CHUNK_SIZE
+
+
+def generateSchedule(tasks, start, availableMinutes, lastDay=None, blackedOut=None):
     #LOGIC FIX-------(Maybe)----------------------------------------------------
     #dailyAmount is being treated as the entire available time for the whole week
     #I should change that to either be the daily amount available or to be the whole week
     if lastDay is None:
         lastDay = max(t.due for t in tasks)
+
+    blackoutChunks = [False] * CHUNKS_PER_DAY
+    blackoutLabels = [""] * CHUNKS_PER_DAY
+
+    if blackedOut:
+        for block in blackedOut:
+            start_idx = timeToChunk(block["start"])
+            end_idx = timeToChunk(block["end"])
+            label = block.get("label", "BLOCKED")
+            for i in range(start_idx, end_idx):
+                if 0 <= i < CHUNKS_PER_DAY:
+                    blackoutChunks[i] = True
+                    blackoutLabels[i] = label
 
     #finding available time
     dailyAmount = floor(availableMinutes / CHUNK_SIZE)
@@ -100,12 +120,28 @@ def generateSchedule(tasks, start, availableMinutes, lastDay=None):\
     current = start
 
     while current <= lastDay:
-        dailyPlan = []
-        timeRemaining = dailyAmount
+        day_slots = [("FREE", 1) for _ in range(CHUNKS_PER_DAY)]
 
-        eligible = [t for t in tasks if t.remaining > 0 and t.due >= start]
+        # Mark blackout slots
+        for i in range(CHUNKS_PER_DAY):
+            if blackoutChunks[i]:
+                day_slots[i] = (blackoutLabels[i], 1)
 
+        # Count how many chunks are free to work
+        free_chunks = sum(1 for slot, _ in day_slots if slot == "FREE")
+        if free_chunks == 0:
+            schedule[current] = [("ALL BLOCKED", CHUNKS_PER_DAY)]
+            current += timedelta(days=1)
+            continue
+
+        # Eligible tasks
+        eligible = [t for t in tasks if t.remaining > 0 and t.due >= current]
+
+        # Required daily allocation
         required = {}
+        timeRemaining = free_chunks
+
+
         for t in eligible:
             daysLeft = max(1, (t.due - current).days + 1)
             neededToday = ceil(t.remaining / daysLeft)
@@ -117,9 +153,10 @@ def generateSchedule(tasks, start, availableMinutes, lastDay=None):\
                 required[t] = take
                 remainingTime -= take
 
+        filled = 0
         for t, take in required.items():
             t.remaining -= take
-            dailyPlan.append((t.name, take))
+            filled += take
 
         if timeRemaining > 0:
             elig2 = [t for t in tasks if t.remaining > 0 and t.due >= current]
@@ -130,7 +167,6 @@ def generateSchedule(tasks, start, availableMinutes, lastDay=None):\
                     daysLeft = max(1, (t.due - current).days + 1)
                     urgency = 1.0 / daysLeft
                     weights.append((t, t.priority * urgency))
-                totalW = sum(w for _, w in weights) or 1.0
 
                 while timeRemaining > 0 and any(t.remaining > 0 for t in elig2):
                     t = max((t for t, w in weights if t.remaining > 0), key=lambda x: next(w for tt, w in weights if tt is x))
@@ -141,26 +177,50 @@ def generateSchedule(tasks, start, availableMinutes, lastDay=None):\
                         break
                     t.remaining -= take
                     timeRemaining -= take
-                    dailyPlan.append((t.name, take))
+                    filled += take
+
+        for t in eligible:
+            work_chunks = ceil(t.remaining / CHUNK_SIZE)
+            for i in range(CHUNKS_PER_DAY):
+                if work_chunks <= 0:
+                    break
+                if day_slots[i][0] == "FREE":
+                    day_slots[i] = (t.name, 1)
+                    work_chunks -= 1
 
         merged = []
-        for name, chunks in dailyPlan:
-            if merged and merged[-1][0] == name:
-                merged[-1] = (name, merged[-1][1] + chunks)
+        last_label = None
+        count = 0
+        for label, _ in day_slots:
+            if label == last_label:
+                count += 1
             else:
-                merged.append((name, chunks))
-        schedule[current] = merged
+                if last_label is not None:
+                    merged.append((last_label, count))
+                last_label = label
+                count = 1
+        if last_label:
+            merged.append((last_label, count))
 
+        schedule[current] = merged
         current += timedelta(days=1)
+
     return schedule, warnings
 
 
 def main():
     tasks = []
+    blackedOutList = [
+        {"start": "00:00", "end": "07:00", "label": "Sleep"},
+        {"start": "12:00", "end": "13:00", "label": "Lunch"},
+        {"start": "22:00", "end": "23:59", "label": "Wind down"}
+    ]
     #blackout time has not been implemented yet
-    blackout = input("How much break time do you want each day? (enter in minutes): ")
+    # blackOut = input("How much break time do you want each day? (enter in minutes): ")
     totalTime = input("Enter how much time you want to work per day (enter in minutes): ")
     newTask = input("Please enter your first task to do (Name, YYYY-MM-DD, time in minutes, priority): ")
+
+
     while newTask != "0":
         hold = newTask.split(",")
         dateList = hold[1].split("-")
@@ -168,9 +228,10 @@ def main():
         newTask = input("Enter another task (type 0 to finish): ")
     
     schedule, warnings = generateSchedule(
-    tasks=tasks,
-    start=date.today(),
-    availableMinutes = int(totalTime)
+        tasks=tasks,
+        start=date.today(),
+        availableMinutes = int(totalTime),
+        blackedOut= blackedOutList
     )
 
     for w in warnings:
