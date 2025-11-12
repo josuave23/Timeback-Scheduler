@@ -9,6 +9,7 @@ This will be able to take an input of tasks from the user and create a balanced 
 
 ## To Do:
 ### Short term
+- ~~implement a break system~~
 - Make code more robust and crash-proof
 - Debug the current iteration
 - Optimize current code
