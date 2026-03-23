@@ -3,19 +3,24 @@
 
 A passion project I am working on to help people manage their time better. 
 
-This will be able to take an input of tasks from the user and create a balanced schedule of when a user should do their tasks
+Note: Version 1.0.0 is identical to my public submission for the BeachHacks 9.0 hackathon, which is public on my page. This is the repo in which I will continue development on this project
 
-### Current Step: First Iteration
+## Current Version: 1.0.0
 
-## To Do:
-### Short term
-- ~~implement a break system~~
-- Make code more robust and crash-proof
-- Debug the current iteration
-- Optimize current code
-- Add Canvas and Google calendar API
-  - Code created, just need to implement it back in
-### Long term
+## Setup
+After download, ensure that main.py, schedule.py. task.py, gcal.py, and ui.py are all in the same folder
+
+Then, follow these steps:
+1. Go to https://console.cloud.google.com
+2. Create a new project and enable the Google Calendar API
+3. Create OAuth 2.0 credentials (Desktop app)
+4. Download the credentials file and rename it to `credentials.json`
+5. Place it in the project root
+6. Run `pip install -r requirements.txt`
+7. Run `python main.py` — a browser window will open to authenticate
+
+## To Implement:
 - Implement a calandar program for this to run on
-- create a GUI for user accessability
-
+- UI changes for an easier user experience
+- Implement an easy way to manually block out timeslots for breaks
+- Add Canvas API
